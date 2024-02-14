@@ -5,7 +5,10 @@
 
 import rospy
 import cv2
-from cv_bridge import (CvBridge)
+from cv_bridge import (
+    CvBridge,
+    CvBridgeError,
+)
 import mediapipe as mp
 import pyrealsense2 as rs2
 import numpy as np
@@ -40,18 +43,16 @@ class PoseLandmarks:
         depth_averaging_count,
         coordinates_averaging_enable,
         coordinates_averaging_count,
+        enable_imshow,
     ):
         """
         
         """
 
         # # Private constants:
+        self.__NODE_NAME = node_name
         self.__CAMERA_NAME = camera_name
         self.__IMAGE_ROTATION = image_rotation
-        self.__HEIGHT = 0
-        self.__WIDTH = 0
-        self.__IMAGE_CENTER = None
-        self.__ROTATION_MATRIX = None
         self.__DEPTH_AVERAGING = {
             'enable': depth_averaging_enable,
             'count': depth_averaging_count,
@@ -60,6 +61,7 @@ class PoseLandmarks:
             'enable': coordinates_averaging_enable,
             'count': coordinates_averaging_count,
         }
+        self.__ENABLE_IMSHOW = enable_imshow
 
         self.__BRIDGE = CvBridge()
 
@@ -75,7 +77,6 @@ class PoseLandmarks:
         )
 
         # # Public constants:
-        self.NODE_NAME = node_name
 
         # # Private variables:
         self.__cv_color_image = None
@@ -98,6 +99,11 @@ class PoseLandmarks:
             np.array([]),
             np.array([]),
         ]
+        self.__enable_imshow = self.__ENABLE_IMSHOW
+
+        self.__rotation_matrix = None
+        self.__rotated_width = None
+        self.__rotated_height = None
 
         # # Public variables:
 
@@ -106,26 +112,31 @@ class PoseLandmarks:
         self.__dependency_initialized = False
 
         self.__node_is_initialized = rospy.Publisher(
-            f'{self.NODE_NAME}/is_initialized',
+            f'{self.__NODE_NAME}/is_initialized',
             Bool,
             queue_size=1,
         )
 
         # NOTE: Specify dependency initial False initial status.
-        self.__dependency_status = {
-            'realsense_camera': False,
-        }
+        self.__dependency_status = {}
 
         # NOTE: Specify dependency is_initialized topic (or any other topic,
         # which will be available when the dependency node is running properly).
-        self.__dependency_status_topics = {
-            'realsense_camera':
-                rospy.Subscriber(
-                    f'/{self.__CAMERA_NAME}/color/image_raw',
-                    Image,
-                    self.__realsense_color_callback,
-                ),
-        }
+        self.__dependency_status_topics = {}
+
+        self.__dependency_status['image_topic'] = False
+        self.__dependency_status_topics['image_topic'] = rospy.Subscriber(
+            f'/{self.__CAMERA_NAME}/color/image_raw',
+            Image,
+            self.__image_topic_callback,
+        )
+
+        self.__dependency_status['align_depth_topic'] = False
+        self.__dependency_status_topics['align_depth_topic'] = rospy.Subscriber(
+            f'/{self.__CAMERA_NAME}/aligned_depth_to_color/image_raw',
+            Image,
+            self.__realsense_alighed_depth_callback,
+        )
 
         # # Service provider:
 
@@ -133,7 +144,7 @@ class PoseLandmarks:
 
         # # Topic publisher:
         self.__pose_landmarks_image = rospy.Publisher(
-            f'{self.NODE_NAME}/pose_landmarks_image',
+            f'{self.__NODE_NAME}/image',
             Image,
             queue_size=1,
         )
@@ -147,7 +158,7 @@ class PoseLandmarks:
         rospy.Subscriber(
             f'/{self.__CAMERA_NAME}/color/image_raw',
             Image,
-            self.__realsense_color_callback,
+            self.__image_topic_callback,
         )
         rospy.Subscriber(
             f'/{self.__CAMERA_NAME}/aligned_depth_to_color/image_raw',
@@ -167,56 +178,76 @@ class PoseLandmarks:
     # # Service handlers:
 
     # # Topic callbacks:
-    def __realsense_color_callback(self, message):
+    def __image_topic_callback(self, message):
+        """
+        
         """
 
-        """
+        cv_image = None
 
-        frame = self.__BRIDGE.imgmsg_to_cv2(
-            img_msg=message,
-            desired_encoding='passthrough',
-        )
-
-        original_height, original_width = message.height, message.width
-
-        if not self.__dependency_status['realsense_camera']:
-            # getRotationMatrix2D needs coordinates in reverse order (width,
-            # height) compared to shape.
-            self.__IMAGE_CENTER = (original_width // 2, original_height // 2)
-
-            self.__ROTATION_MATRIX = cv2.getRotationMatrix2D(
-                self.__IMAGE_CENTER,
-                self.__IMAGE_ROTATION,
-                1.0,
+        try:
+            cv_image = self.__BRIDGE.imgmsg_to_cv2(
+                message,
+                'bgr8',
             )
 
-            # Rotation calculates the cos and sin, taking absolutes of those.
-            abs_cos = abs(self.__ROTATION_MATRIX[0, 0])
-            abs_sin = abs(self.__ROTATION_MATRIX[0, 1])
-
-            # Find the new width and height bounds.
-            self.__WIDTH = int(
-                original_height * abs_sin + original_width * abs_cos
+        except CvBridgeError as e:
+            rospy.logerr(
+                (
+                    f'{self.__NODE_NAME}:'
+                    f' an error occured while converting from Image message to cv2. \n'
+                    f'{e} \n'
+                ),
             )
-            self.__HEIGHT = int(
-                original_height * abs_cos + original_width * abs_sin
+            return
+
+        if self.__IMAGE_ROTATION != 0:
+            # Calculate rotation matrix and new width and height to avoid image
+            # shrinking and distortion.
+            if not self.__dependency_status['image_topic']:
+                original_height, original_width = cv_image.shape[:2]
+
+                # getRotationMatrix2D needs coordinates in reverse order (width,
+                # height) compared to shape.
+                image_center = (original_width // 2, original_height // 2)
+
+                self.__rotation_matrix = cv2.getRotationMatrix2D(
+                    image_center,
+                    self.__IMAGE_ROTATION,
+                    1.0,
+                )
+
+                # Rotation calculates the cos and sin, taking absolutes of
+                # those.
+                abs_cos = abs(self.__rotation_matrix[0, 0])
+                abs_sin = abs(self.__rotation_matrix[0, 1])
+
+                # Find the new width and height bounds.
+                self.__rotated_width = int(
+                    original_height * abs_sin + original_width * abs_cos
+                )
+                self.__rotated_height = int(
+                    original_height * abs_cos + original_width * abs_sin
+                )
+
+                # Subtract old image center (bringing image back to origo) and
+                # adding the new image center coordinates.
+                (self.__rotation_matrix[0, 2]
+                ) += (self.__rotated_width / 2 - image_center[0])
+                (self.__rotation_matrix[1, 2]
+                ) += (self.__rotated_height / 2 - image_center[1])
+
+            # Rotate the image.
+            cv_image = cv2.warpAffine(
+                cv_image,
+                self.__rotation_matrix,
+                (self.__rotated_width, self.__rotated_height),
             )
 
-            # Subtract old image center (bringing image back to origo) and
-            # adding the new image center coordinates.
-            self.__ROTATION_MATRIX[
-                0, 2] += (self.__WIDTH / 2 - self.__IMAGE_CENTER[0])
-            self.__ROTATION_MATRIX[
-                1, 2] += (self.__HEIGHT / 2 - self.__IMAGE_CENTER[1])
+        self.__cv_color_image = cv_image
 
-            self.__dependency_status['realsense_camera'] = True
-
-        # Rotate image with the new bounds and translated rotation matrix.
-        self.__cv_color_image = cv2.warpAffine(
-            frame,
-            self.__ROTATION_MATRIX,
-            (self.__WIDTH, self.__HEIGHT),
-        )
+        if not self.__is_initialized:
+            self.__dependency_status['image_topic'] = True
 
     def __realsense_alighed_depth_callback(self, message):
         """
@@ -224,19 +255,23 @@ class PoseLandmarks:
         """
 
         if not self.__is_initialized:
+            self.__dependency_status['align_depth_topic'] = True
             return
 
-        frame = self.__BRIDGE.imgmsg_to_cv2(
+        cv_depth_image = self.__BRIDGE.imgmsg_to_cv2(
             img_msg=message,
             desired_encoding=message.encoding,
         )
 
         # Apply the rotation to the image.
-        self.__cv_depth_image = cv2.warpAffine(
-            frame,
-            self.__ROTATION_MATRIX,
-            (self.__WIDTH, self.__HEIGHT),
-        )
+        if self.__IMAGE_ROTATION != 0:
+            cv_depth_image = cv2.warpAffine(
+                cv_depth_image,
+                self.__rotation_matrix,
+                (self.__rotated_width, self.__rotated_height),
+            )
+
+        self.__cv_depth_image = cv_depth_image
 
     def __realsense_alighed_depth_info_callback(self, message):
         """
@@ -247,21 +282,21 @@ class PoseLandmarks:
         if self.__instristics:
             return
 
-        self.intrinsics = rs2.intrinsics()
-        self.intrinsics.width = message.width
-        self.intrinsics.height = message.height
-        self.intrinsics.ppx = message.K[2]
-        self.intrinsics.ppy = message.K[5]
-        self.intrinsics.fx = message.K[0]
-        self.intrinsics.fy = message.K[4]
+        self.__intrinsics = rs2.intrinsics()
+        self.__intrinsics.width = message.width
+        self.__intrinsics.height = message.height
+        self.__intrinsics.ppx = message.K[2]
+        self.__intrinsics.ppy = message.K[5]
+        self.__intrinsics.fx = message.K[0]
+        self.__intrinsics.fy = message.K[4]
 
         if message.distortion_model == 'plumb_bob':
-            self.intrinsics.model = rs2.distortion.brown_conrady
+            self.__intrinsics.model = rs2.distortion.brown_conrady
 
         elif message.distortion_model == 'equidistant':
-            self.intrinsics.model = rs2.distortion.kannala_brandt4
+            self.__intrinsics.model = rs2.distortion.kannala_brandt4
 
-        self.intrinsics.coeffs = [i for i in message.D]
+        self.__intrinsics.coeffs = [i for i in message.D]
 
     # # Timer functions:
 
@@ -288,7 +323,7 @@ class PoseLandmarks:
             if self.__dependency_status_topics[key].get_num_connections() != 1:
                 if self.__dependency_status[key]:
                     rospy.logerr(
-                        (f'{self.NODE_NAME}: '
+                        (f'{self.__NODE_NAME}: '
                          f'lost connection to {key}!')
                     )
 
@@ -313,7 +348,7 @@ class PoseLandmarks:
             rospy.logwarn_throttle(
                 15,
                 (
-                    f'{self.NODE_NAME}:'
+                    f'{self.__NODE_NAME}:'
                     f'{waiting_for}'
                     # f'\nMake sure those dependencies are running properly!'
                 ),
@@ -322,7 +357,7 @@ class PoseLandmarks:
         # NOTE: Add more initialization criterea if needed.
         if (self.__dependency_initialized):
             if not self.__is_initialized:
-                rospy.loginfo(f'\033[92m{self.NODE_NAME}: ready.\033[0m',)
+                rospy.loginfo(f'\033[92m{self.__NODE_NAME}: ready.\033[0m',)
 
                 self.__is_initialized = True
 
@@ -408,39 +443,30 @@ class PoseLandmarks:
         if self.__cv_depth_image_snapshot is None:
             return
 
-        frame = cv2.cvtColor(
-            frame,
-            cv2.COLOR_BGR2RGB,
-        )
-
         try:
 
             # Process the frame for pose detection.
             pose_results = self.__POSE.process(frame)
 
-            # If no landmarks were detected.
-            if not pose_results.pose_landmarks:
-                return
+            # If landmarks were detected.
+            if pose_results.pose_landmarks:
 
-            # Draw pose landmarks on the frame.
-            self.__MP_DRAWING.draw_landmarks(
-                frame,
-                pose_results.pose_landmarks,
-                self.__MP_POSE.POSE_CONNECTIONS,
-            )
+                # Draw pose landmarks on the frame.
+                self.__MP_DRAWING.draw_landmarks(
+                    frame,
+                    pose_results.pose_landmarks,
+                    self.__MP_POSE.POSE_CONNECTIONS,
+                )
+
+                self.__pose_landmarks = pose_results
+                self.__update_upperbody_keypoints(
+                    self.__pose_landmarks.pose_landmarks.landmark
+                )
 
         except Exception as e:
             print(e)
 
-        # frame = cv2.flip(frame, 1)
-
         self.__pose_landmarks_frame = frame
-
-        self.__pose_landmarks = pose_results
-
-        self.__update_upperbody_keypoints(
-            self.__pose_landmarks.pose_landmarks.landmark
-        )
 
     def __publish_landmarks_image(self):
         """
@@ -452,9 +478,8 @@ class PoseLandmarks:
 
         image_message = self.__BRIDGE.cv2_to_imgmsg(
             self.__pose_landmarks_frame,
-            encoding="passthrough",
+            encoding='bgr8',
         )
-
         self.__pose_landmarks_image.publish(image_message)
 
     def __publish_upperbody_keypoints(self):
@@ -501,7 +526,7 @@ class PoseLandmarks:
             depth = copy(depth_averaged)
 
         coordinates_3d = rs2.rs2_deproject_pixel_to_point(
-            self.intrinsics,
+            self.__intrinsics,
             [pixel_x, pixel_y],
             depth,
         )
@@ -572,6 +597,7 @@ class PoseLandmarks:
         """
 
         keypoints = list()
+        height, width = self.__pose_landmarks_frame.shape[:2]
 
         # 0 - left_shoulder, 1 - right_shoulder,
         # 2 - left_elbow, 3 - right_elbow,
@@ -579,8 +605,8 @@ class PoseLandmarks:
         for i in range(11, 17):
 
             keypoint = self.__get_3d_coordinates(
-                pixel_x=int(pose_landmarks[i].x * self.__WIDTH),
-                pixel_y=int(pose_landmarks[i].y * self.__HEIGHT),
+                pixel_x=int(pose_landmarks[i].x * width),
+                pixel_y=int(pose_landmarks[i].y * height),
                 keypoint_i=i - 11,
             )
 
@@ -589,12 +615,10 @@ class PoseLandmarks:
         # 6 - chest.
         keypoint = self.__get_3d_coordinates(
             pixel_x=int(
-                ((pose_landmarks[11].x + pose_landmarks[12].x) / 2)
-                * self.__WIDTH
+                ((pose_landmarks[11].x + pose_landmarks[12].x) / 2) * width
             ),
             pixel_y=int(
-                ((pose_landmarks[11].y + pose_landmarks[12].y) / 2)
-                * self.__HEIGHT
+                ((pose_landmarks[11].y + pose_landmarks[12].y) / 2) * height
             ),
             keypoint_i=6,
         )
@@ -604,12 +628,10 @@ class PoseLandmarks:
         # 7 - waist.
         keypoint = self.__get_3d_coordinates(
             pixel_x=int(
-                ((pose_landmarks[23].x + pose_landmarks[24].x) / 2)
-                * self.__WIDTH
+                ((pose_landmarks[23].x + pose_landmarks[24].x) / 2) * width
             ),
             pixel_y=int(
-                ((pose_landmarks[23].y + pose_landmarks[24].y) / 2)
-                * self.__HEIGHT
+                ((pose_landmarks[23].y + pose_landmarks[24].y) / 2) * height
             ),
             keypoint_i=7,
         )
@@ -621,6 +643,28 @@ class PoseLandmarks:
             return
 
         self.__keypoints = keypoints
+
+    def __imshow(self):
+        """
+        
+        """
+
+        # Optionally show the frame.
+        if self.__enable_imshow:
+            cv2.imshow(
+                'self.__cv_image',
+                self.__pose_landmarks_frame,
+            )
+
+            if (
+                cv2.waitKey(1) & 0xFF == ord('q') or
+                cv2.getWindowProperty('self.__cv_image',
+                                      cv2.WND_PROP_VISIBLE) < 1
+            ):
+                cv2.destroyAllWindows()
+                self.__enable_imshow = False
+
+                rospy.loginfo(f'{self.__NODE_NAME}: imshow window was closed.',)
 
     # # Public methods:
     def main_loop(self):
@@ -640,18 +684,21 @@ class PoseLandmarks:
         self.__publish_landmarks_image()
         self.__publish_upperbody_keypoints()
 
+        if self.__pose_landmarks_frame is not None:
+            self.__imshow()
+
     def node_shutdown(self):
         """
         
         """
 
-        rospy.loginfo_once(f'{self.NODE_NAME}: node is shutting down...',)
+        rospy.loginfo_once(f'{self.__NODE_NAME}: node is shutting down...',)
 
         # NOTE: Add code, which needs to be executed on nodes' shutdown here.
         # Publishing to topics is not guaranteed, use service calls or
         # set parameters instead.
 
-        rospy.loginfo_once(f'{self.NODE_NAME}: node has shut down.',)
+        rospy.loginfo_once(f'{self.__NODE_NAME}: node has shut down.',)
 
 
 def main():
@@ -695,6 +742,10 @@ def main():
         param_name=f'{node_name}/coordinates_averaging_count',
         default=5,
     )
+    enable_imshow = rospy.get_param(
+        param_name=f'{node_name}/enable_imshow',
+        default=False,
+    )
 
     pose_landmarks = PoseLandmarks(
         node_name=node_name,
@@ -704,6 +755,7 @@ def main():
         depth_averaging_count=depth_averaging_count,
         coordinates_averaging_enable=coordinates_averaging_enable,
         coordinates_averaging_count=coordinates_averaging_count,
+        enable_imshow=enable_imshow,
     )
 
     rospy.on_shutdown(pose_landmarks.node_shutdown)
