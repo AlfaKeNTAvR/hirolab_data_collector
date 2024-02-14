@@ -41,6 +41,7 @@ class ImageWriter:
         image_topic,
         output_file_path,
         image_writing_period,
+        image_rotation,
         enable_imshow,
     ):
         """
@@ -53,6 +54,7 @@ class ImageWriter:
         self.__IMAGE_TOPIC = image_topic
         self.__OUTPUT_FILE_PATH = output_file_path
         self.__IMAGE_WRITING_PERIOD = image_writing_period
+        self.__IMAGE_ROTATION = image_rotation
         self.__ENABLE_IMSHOW = enable_imshow
 
         self.__BRIDGE = CvBridge()
@@ -61,9 +63,16 @@ class ImageWriter:
 
         # # Private variables:
         # NOTE: By default all new class variables should be private.
+        self.__cv_image = None
         self.__output_file_path = None
         self.__recorder_status = 'finished'  # 'paused', 'recording'
         self.__elapsed_time = 0.0
+
+        self.__enable_imshow = self.__ENABLE_IMSHOW
+
+        self.__rotation_matrix = None
+        self.__rotated_width = None
+        self.__rotated_height = None
 
         # # Public variables:
 
@@ -89,7 +98,7 @@ class ImageWriter:
             rospy.Subscriber(
                 f'{self.__IMAGE_TOPIC}',
                 Image,
-                self.__camera_callback,
+                self.__image_topic_callback,
             )
         )
 
@@ -123,7 +132,7 @@ class ImageWriter:
         rospy.Subscriber(
             f'{self.__IMAGE_TOPIC}',
             Image,
-            self.__camera_callback,
+            self.__image_topic_callback,
         )
 
         # # Timers:
@@ -132,15 +141,20 @@ class ImageWriter:
             self.__write_image_timer,
         )
 
+        # # Node parameters:
+        rospy.loginfo(
+            f'{self.__NODE_NAME}:'
+            '\nNode parameters:'
+            f'\n- image_topic: {self.__IMAGE_TOPIC}'
+            f'\n- output_file_path: {self.__OUTPUT_FILE_PATH}'
+            f'\n- image_writing_period: {self.__IMAGE_WRITING_PERIOD}'
+            f'\n- image_rotation: {self.__IMAGE_ROTATION}'
+            f'\n- enable_imshow: {self.__ENABLE_IMSHOW}'
+            '\n'
+        )
+
     # # Dependency status callbacks:
     # NOTE: each dependency topic should have a callback function, which will
-    # set __dependency_status variable.
-    # def __dependency_name_callback(self, message):
-    #     """Monitors <node_name>/is_initialized topic.
-
-    #     """
-
-    #     self.__dependency_status['dependency_node_name'] = message.data
 
     # # Service handlers:
     def __resume_recording_handler(self, request):
@@ -218,27 +232,76 @@ class ImageWriter:
         return []
 
     # # Topic callbacks:
-    def __camera_callback(self, message):
+    def __image_topic_callback(self, message):
         """
         
         """
 
+        cv_image = None
+
         try:
-            self.__cv_image = self.__BRIDGE.imgmsg_to_cv2(
+            cv_image = self.__BRIDGE.imgmsg_to_cv2(
                 message,
                 'bgr8',
             )
-            # # TODO: Uncomment if the image appears bluish:
-            # self.__cv_image = cvtColor(
-            #     self.__cv_image,
-            #     COLOR_BGR2RGB,
-            # )
-
-            if not self.__is_initialized:
-                self.__dependency_status['image_topic'] = True
 
         except CvBridgeError as e:
-            print(e)
+            rospy.logerr(
+                (
+                    f'{self.__NODE_NAME}:'
+                    f' an error occured while converting from Image message to cv2. \n'
+                    f'{e} \n'
+                ),
+            )
+            return
+
+        if self.__IMAGE_ROTATION != 0:
+            # Calculate rotation matrix and new width and height to avoid image
+            # shrinking and distortion.
+            if not self.__dependency_status['image_topic']:
+                original_height, original_width = cv_image.shape[:2]
+
+                # getRotationMatrix2D needs coordinates in reverse order (width,
+                # height) compared to shape.
+                image_center = (original_width // 2, original_height // 2)
+
+                self.__rotation_matrix = cv2.getRotationMatrix2D(
+                    image_center,
+                    self.__IMAGE_ROTATION,
+                    1.0,
+                )
+
+                # Rotation calculates the cos and sin, taking absolutes of
+                # those.
+                abs_cos = abs(self.__rotation_matrix[0, 0])
+                abs_sin = abs(self.__rotation_matrix[0, 1])
+
+                # Find the new width and height bounds.
+                self.__rotated_width = int(
+                    original_height * abs_sin + original_width * abs_cos
+                )
+                self.__rotated_height = int(
+                    original_height * abs_cos + original_width * abs_sin
+                )
+
+                # Subtract old image center (bringing image back to origo) and
+                # adding the new image center coordinates.
+                (self.__rotation_matrix[0, 2]
+                ) += (self.__rotated_width / 2 - image_center[0])
+                (self.__rotation_matrix[1, 2]
+                ) += (self.__rotated_height / 2 - image_center[1])
+
+            # Rotate the image.
+            cv_image = cv2.warpAffine(
+                cv_image,
+                self.__rotation_matrix,
+                (self.__rotated_width, self.__rotated_height),
+            )
+
+        self.__cv_image = cv_image
+
+        if not self.__is_initialized:
+            self.__dependency_status['image_topic'] = True
 
     # # Timer callbacks:
     def __write_image_timer(self, event):
@@ -390,6 +453,26 @@ class ImageWriter:
         rospy.loginfo(f'{self.__NODE_NAME}: the image was saved.')
         self.__elapsed_time += self.__IMAGE_WRITING_PERIOD
 
+    def __imshow(self):
+        """
+        
+        """
+
+        # Optionally show the frame.
+        if self.__enable_imshow:
+            cv2.imshow(
+                'self.__cv_image',
+                self.__cv_image,
+            )
+
+            if (
+                cv2.waitKey(1) & 0xFF == ord('q') or
+                cv2.getWindowProperty('self.__cv_image',
+                                      cv2.WND_PROP_VISIBLE) < 1
+            ):
+                cv2.destroyAllWindows()
+                self.__enable_imshow = False
+
     # # Public methods:
     # NOTE: By default all new class methods should be private.
     def main_loop(self):
@@ -406,15 +489,7 @@ class ImageWriter:
         # node was successfully initialized.
         self.__status.publish(self.__recorder_status)
 
-        # Optionally show the frame.
-        if self.__ENABLE_IMSHOW:
-            cv2.imshow(
-                'self.__cv_image',
-                self.__cv_image,
-            )
-
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                pass
+        self.__imshow()
 
     def node_shutdown(self):
         """
@@ -467,6 +542,10 @@ def main():
         param_name=f'{rospy.get_name()}/image_writing_period',
         default=0.5,
     )
+    image_rotation = rospy.get_param(
+        param_name=f'{rospy.get_name()}/image_rotation',
+        default=0,
+    )
     enable_imshow = rospy.get_param(
         param_name=f'{node_name}/enable_imshow',
         default=True,
@@ -491,6 +570,7 @@ def main():
         image_topic=image_topic,
         output_file_path=output_file_path,
         image_writing_period=image_writing_period,
+        image_rotation=image_rotation,
         enable_imshow=enable_imshow,
     )
 

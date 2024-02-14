@@ -17,6 +17,9 @@
     |   |_____m0 (folder):
     |   |   |
     |   |   |_____t0 (folder):
+    |   |   |   |
+    |   |   |   |_____images (folder)
+    |   |   |
     |   |   |_____t1 (folder):
     |   |   |_____...
     |   |   
@@ -61,6 +64,11 @@
     name="image_topic" 
     default="/camera/color/image_raw"/>
 
+    <!-- Image rotation: how to rotate the input image [degrees]. -->
+    <arg 
+    name="image_rotation" 
+    default="0"/>
+
     <!-- Enable imshow: show the incoming image for debugging purposes. -->
     <arg 
     name="enable_imshow" 
@@ -91,6 +99,9 @@
             <param 
             name="image_topic" 
             value="$(arg image_topic)"/>
+            <param 
+            name="image_rotation" 
+            value="$(arg image_rotation)"/>
             <param 
             name="enable_imshow" 
             value="$(arg enable_imshow)"/>
