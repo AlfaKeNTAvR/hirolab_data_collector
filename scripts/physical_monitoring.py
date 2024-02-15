@@ -1,4 +1,4 @@
-# #!/usr/bin/env python
+#!/usr/bin/env python
 
 from mat4py import loadmat
 from mpl_toolkits import mplot3d
@@ -87,26 +87,21 @@ vel_list = [0] * 10
 # # Load workload mapping data (TC version)
 
 # NOTE: What are those .mat files?
+muscle_mapping_folder = '/home/fetch/catkin_workspaces/iona_devel_ws/src/hirolab_data_collector/muscle_mapping'
 
-AD_mapping_raw = loadmat(
-    '/home/alfakentavr/catkin_workspaces/relaxed_ik_ws/src/data_collector/muscle_mapping/AD_Effort.mat'
-)
+AD_mapping_raw = loadmat(f'{muscle_mapping_folder}/AD_Effort.mat')
 AD_mapping_data = AD_mapping_raw['AD_E']
 AD_mapping = np.zeros(150)  # joint limited range of motion
 for i in range(len(AD_mapping_data)):
     AD_mapping[i] = float(str(AD_mapping_data[i])[1:-1])
 
-MD_mapping_raw = loadmat(
-    '/home/alfakentavr/catkin_workspaces/relaxed_ik_ws/src/data_collector/muscle_mapping/MD_Effort.mat'
-)
+MD_mapping_raw = loadmat(f'{muscle_mapping_folder}/MD_Effort.mat')
 MD_mapping_data = MD_mapping_raw['MD_E']
 MD_mapping = np.zeros(120)  # joint limited range of motion
 for i in range(len(MD_mapping_data)):
     MD_mapping[i] = float(str(MD_mapping_data[i])[1:-1])
 
-BI_mapping_raw = loadmat(
-    '/home/alfakentavr/catkin_workspaces/relaxed_ik_ws/src/data_collector/muscle_mapping/BI_Effort.mat'
-)
+BI_mapping_raw = loadmat(f'{muscle_mapping_folder}/BI_Effort.mat')
 BI_mapping_data = BI_mapping_raw['B_E']
 BI_mapping = np.zeros(150)  # joint limited range of motion
 for i in range(len(BI_mapping_data)):
@@ -204,51 +199,55 @@ def upperbody_keypoints_callback(message):
 
     # NOTE: Why all coordinates are negated?
 
-    # # Upper arm (Shoulder):
-    lua_x = -message.keypoints[0].x
-    lua_y = -message.keypoints[0].y
-    lua_z = -message.keypoints[0].z
+    try:
+        # # Upper arm (Shoulder):
+        lua_x = -message.keypoints[0].x
+        lua_y = -message.keypoints[0].y
+        lua_z = -message.keypoints[0].z
 
-    rua_x = -message.keypoints[1].x
-    rua_y = -message.keypoints[1].y
-    rua_z = -message.keypoints[1].z
+        rua_x = -message.keypoints[1].x
+        rua_y = -message.keypoints[1].y
+        rua_z = -message.keypoints[1].z
 
-    # # Lower arm (Elbow):
-    lla_x = -message.keypoints[2].x
-    lla_y = -message.keypoints[2].y
-    lla_z = -message.keypoints[2].z
+        # # Lower arm (Elbow):
+        lla_x = -message.keypoints[2].x
+        lla_y = -message.keypoints[2].y
+        lla_z = -message.keypoints[2].z
 
-    rla_x = -message.keypoints[3].x
-    rla_y = -message.keypoints[3].y
-    rla_z = -message.keypoints[3].z
+        rla_x = -message.keypoints[3].x
+        rla_y = -message.keypoints[3].y
+        rla_z = -message.keypoints[3].z
 
-    # # Hand (Wrist):
-    lh_x = -message.keypoints[4].x
-    lh_y = -message.keypoints[4].y
-    lh_z = -message.keypoints[4].z
+        # # Hand (Wrist):
+        lh_x = -message.keypoints[4].x
+        lh_y = -message.keypoints[4].y
+        lh_z = -message.keypoints[4].z
 
-    rh_x = -message.keypoints[5].x
-    rh_y = -message.keypoints[5].y
-    rh_z = -message.keypoints[5].z
+        rh_x = -message.keypoints[5].x
+        rh_y = -message.keypoints[5].y
+        rh_z = -message.keypoints[5].z
 
-    # # Chest and Waist:
-    chest_x = -message.keypoints[6].x
-    chest_y = -message.keypoints[6].y
-    chest_z = -message.keypoints[6].z
+        # # Chest and Waist:
+        chest_x = -message.keypoints[6].x
+        chest_y = -message.keypoints[6].y
+        chest_z = -message.keypoints[6].z
 
-    waist_x = -message.keypoints[7].x
-    waist_y = -message.keypoints[7].y
-    waist_z = -message.keypoints[7].z
+        waist_x = -message.keypoints[7].x
+        waist_y = -message.keypoints[7].y
+        waist_z = -message.keypoints[7].z
 
-    if first_time == 0:
-        old_velocity = np.asarray([rh_x, rh_y, rh_z])
-        first_time = 1
+        if first_time == 0:
+            old_velocity = np.asarray([rh_x, rh_y, rh_z])
+            first_time = 1
 
-    current_velocity = np.asarray([rh_x, rh_y, rh_z])
+        current_velocity = np.asarray([rh_x, rh_y, rh_z])
 
-    velocity_magnitude = np.linalg.norm(current_velocity - old_velocity)
+        velocity_magnitude = np.linalg.norm(current_velocity - old_velocity)
 
-    old_velocity = current_velocity
+        old_velocity = current_velocity
+
+    except:
+        return
 
 
 # def callback_velocity(data):
@@ -349,15 +348,17 @@ def run():
 
     # publish the realtime overall workload
     workload_pub = rospy.Publisher(
-        'physical_workload', Float64MultiArray, queue_size=10
+        '/physical_workload',
+        Float64MultiArray,
+        queue_size=1,
     )
 
     while not rospy.is_shutdown():
 
         try:
 
-            # global rh_x, rh_y, rh_z, lh_x, lh_y, lh_z
-            # global chest_x, chest_y, chest_z, lua_x, lua_y, lua_z, rua_x, rua_y, rua_z, lla_x, lla_y, lla_z, rla_x, rla_y, rla_z, waist_x, waist_y, waist_z
+            global rh_x, rh_y, rh_z, lh_x, lh_y, lh_z
+            global chest_x, chest_y, chest_z, lua_x, lua_y, lua_z, rua_x, rua_y, rua_z, lla_x, lla_y, lla_z, rla_x, rla_y, rla_z, waist_x, waist_y, waist_z
 
             dot_head, = ax.plot3D([], [], [], 'ko', ms=17, mec='k')
             dot_chest, = ax.plot3D([], [], [], 'ko', ms=12, mec='k')
@@ -697,7 +698,7 @@ def run():
                 # workload.publish(workload_overall)
 
                 # for accumulated workload
-                print(physical_accumulated, accumulate_start_time)
+                # print(physical_accumulated, accumulate_start_time)
                 # # print(1)
                 if (
                     physical_accumulated == 1
@@ -901,12 +902,11 @@ def run():
             ani = FuncAnimation(
                 fig=fig, func=update, interval=1, blit=True, repeat=False
             )
-            plt.gcf().canvas.set_window_title('Human Tracking')
             plt.axis('off')
-            plt.show()
+            # plt.show()
 
-        except:
-            print('Something WRONG!!')
+        except Exception as e:
+            print(f'{e}')
 
 
 if __name__ == '__main__':

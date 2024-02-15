@@ -1,0 +1,96 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- ============================ SETTINGS ============================= -->
+
+    <!-- Camera name: is used to subscribe to color and depth topics. -->
+    <arg
+    name="camera_name" 
+    default="camera"/>
+
+    <!-- Image rotation: how to rotate the input image [degrees]. -->
+    <arg 
+    name="image_rotation" 
+    default="0"/>
+
+    <!-- Enable imshow: show the incoming image for debugging purposes. -->
+    <arg 
+    name="enable_imshow" 
+    default="false"/>
+
+    <!--  -->
+    <arg 
+    name="camera_serial_no" 
+    default=""/>
+
+    <!-- Image width: 848px is the optimal width for depth image. -->
+    <arg 
+    name="image_width" 
+    default="848"/>
+
+    <!-- Image height: 480px is the optimal height for depth image. -->
+    <arg 
+    name="image_height" 
+    default="480"/>
+
+    <!--  -->
+    <arg 
+    name="image_fps" 
+    default="30"/>
+
+    <!-- ======================== END OF SETTINGS ========================== -->
+
+    <!-- Realsense camera (dependency): -->
+    <include 
+    file="$(find realsense2_camera)/launch/rs_camera.launch">
+        <arg 
+        name="camera" 
+        value="$(arg camera_name)"/>
+        <arg 
+        name="color_width" 
+        value="$(arg image_width)"/>
+        <arg 
+        name="color_height" 
+        value="$(arg image_height)"/>
+        <arg 
+        name="color_fps" 
+        value="$(arg image_fps)"/>
+        <arg 
+        name="depth_width" 
+        value="$(arg image_width)"/>
+        <arg 
+        name="depth_height" 
+        value="$(arg image_height)"/>
+        <arg 
+        name="depth_fps" 
+        value="$(arg image_fps)"/>
+        <arg 
+        name="align_depth" 
+        value="true"/>
+        <arg 
+        name="serial_no" 
+        value="$(arg camera_serial_no)"/>
+        
+    </include>
+
+    <!-- Pose landmarks (dependency): -->
+    <include 
+    file="$(find data_collector)/launch/pose_landmarks.launch">
+        <arg 
+        name="camera_name" 
+        value="$(arg camera_name)"/>
+        <arg 
+        name="image_rotation" 
+        value="$(arg image_rotation)"/>
+        <arg 
+        name="enable_imshow" 
+        value="$(arg enable_imshow)"/>
+    </include>
+    
+    <!-- Physical monitoring: -->     
+    <node 
+    pkg="data_collector" 
+    type="physical_monitoring.py"
+    name="physical_monitoring" 
+    output="screen">
+    </node>     
+</launch>
