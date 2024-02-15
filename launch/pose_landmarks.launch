@@ -1,14 +1,41 @@
 <?xml version="1.0"?>
 <launch>
     <!-- ============================ SETTINGS ============================= -->
-
+    
+    <!-- Camera name: is used to subscribe to color and depth topics. -->
     <arg
     name="camera_name" 
     default="camera"/>
 
+    <!-- Image rotation: how to rotate the input image [degrees]. -->
     <arg 
     name="image_rotation" 
-    default="90"/>
+    default="0"/>
+
+    <!--  -->
+    <arg 
+    name="depth_averaging_enable" 
+    default="true"/>
+
+    <!--  -->
+    <arg 
+    name="depth_averaging_count" 
+    default="10"/>
+
+    <!--  -->
+    <arg 
+    name="coordinates_averaging_enable" 
+    default="true"/>
+
+    <!--  -->
+    <arg 
+    name="coordinates_averaging_count" 
+    default="5"/>
+
+    <!-- Enable imshow: show the incoming image for debugging purposes. -->
+    <arg 
+    name="enable_imshow" 
+    default="false"/>
 
     <!-- ======================== END OF SETTINGS ========================== -->
     
@@ -24,5 +51,20 @@
         <param 
         name="image_rotation" 
         value="$(arg image_rotation)"/>
+        <param 
+        name="depth_averaging_enable" 
+        value="$(arg depth_averaging_enable)"/>
+        <param 
+        name="depth_averaging_count" 
+        value="$(arg depth_averaging_count)"/>
+        <param 
+        name="coordinates_averaging_enable" 
+        value="$(arg coordinates_averaging_enable)"/>
+        <param 
+        name="coordinates_averaging_count" 
+        value="$(arg coordinates_averaging_count)"/>
+        <param 
+        name="enable_imshow" 
+        value="$(arg enable_imshow)"/>
     </node>     
 </launch>

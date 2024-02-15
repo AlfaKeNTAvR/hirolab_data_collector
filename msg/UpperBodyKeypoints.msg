@@ -1,8 +1,1 @@
-geometry_msgs/Point chest
-geometry_msgs/Point waist
-geometry_msgs/Point right_elbow
-geometry_msgs/Point right_shoulder
-geometry_msgs/Point right_wrist
-geometry_msgs/Point left_shoulder
-geometry_msgs/Point left_elbow
-geometry_msgs/Point left_wrist
+geometry_msgs/Point[] keypoints
