@@ -19,7 +19,10 @@ from copy import (
 )
 import warnings
 
-from std_msgs.msg import (Bool)
+from std_msgs.msg import (
+    Bool,
+    Float64MultiArray,
+)
 from sensor_msgs.msg import (
     Image,
     CameraInfo,
@@ -83,6 +86,8 @@ class PoseLandmarks:
         self.__cv_depth_image = None
         self.__cv_depth_image_snapshot = None
         self.__instristics = None
+
+        self.__physical_workload = 0
 
         self.__pose_landmarks = None
         self.__pose_landmarks_frame = None
@@ -169,6 +174,12 @@ class PoseLandmarks:
             f'/{self.__CAMERA_NAME}/aligned_depth_to_color/camera_info',
             CameraInfo,
             self.__realsense_alighed_depth_info_callback,
+        )
+
+        rospy.Subscriber(
+            '/physical_workload',
+            Float64MultiArray,
+            self.__physical_workload_callback,
         )
 
     # # Dependency status callbacks:
@@ -297,6 +308,13 @@ class PoseLandmarks:
             self.__intrinsics.model = rs2.distortion.kannala_brandt4
 
         self.__intrinsics.coeffs = [i for i in message.D]
+
+    def __physical_workload_callback(self, message: Float64MultiArray):
+        """
+        
+        """
+
+        self.__physical_workload = message.data[0]
 
     # # Timer functions:
 
@@ -465,6 +483,17 @@ class PoseLandmarks:
 
         except Exception as e:
             print(e)
+
+        # Display physical workload.
+        cv2.putText(
+            frame,
+            text=str(int(self.__physical_workload)),
+            org=(790, 415),
+            fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+            fontScale=1,
+            color=(0, 0, 255),
+            thickness=2,
+        )
 
         self.__pose_landmarks_frame = frame
 
