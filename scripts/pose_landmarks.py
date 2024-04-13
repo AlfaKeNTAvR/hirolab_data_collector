@@ -718,6 +718,11 @@ def main():
     # # ROS parameters:
     node_name = rospy.get_name()
 
+    node_frequency = rospy.get_param(
+        param_name=f'{rospy.get_name()}/node_frequency',
+        default=100,
+    )
+
     camera_name = rospy.get_param(
         param_name=f'{node_name}/camera_name',
         default='camera',
@@ -759,9 +764,11 @@ def main():
     )
 
     rospy.on_shutdown(pose_landmarks.node_shutdown)
+    node_rate = rospy.Rate(node_frequency)
 
     while not rospy.is_shutdown():
         pose_landmarks.main_loop()
+        node_rate.sleep()
 
 
 if __name__ == '__main__':

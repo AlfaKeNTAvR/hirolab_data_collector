@@ -76,6 +76,9 @@
     <include 
     file="$(find data_collector)/launch/pose_landmarks.launch">
         <arg 
+        name="node_frequency" 
+        value="10"/>
+        <arg 
         name="camera_name" 
         value="$(arg camera_name)"/>
         <arg 

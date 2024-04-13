@@ -6,7 +6,7 @@
     attempt to maintain in the main_loop. -->
     <arg 
     name="node_frequency" 
-    default="1000"/>
+    default="10"/>
 
     <!-- Output folder path: the absolute path to the main data folder (no slash
     at the end). The standard file stucture will be generated in this folder:

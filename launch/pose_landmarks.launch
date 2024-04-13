@@ -1,6 +1,12 @@
 <?xml version="1.0"?>
 <launch>
     <!-- ============================ SETTINGS ============================= -->
+
+    <!-- Node frequency: the frequency [Hz] which rate.sleep() function will
+    attempt to maintain in the main_loop. -->
+    <arg 
+    name="node_frequency" 
+    default="50"/>
     
     <!-- Camera name: is used to subscribe to color and depth topics. -->
     <arg
@@ -45,6 +51,9 @@
     type="pose_landmarks.py"
     name="pose_landmarks" 
     output="screen">
+        <param 
+        name="node_frequency" 
+        value="$(arg node_frequency)"/>
         <param 
         name="camera_name" 
         value="$(arg camera_name)"/>
