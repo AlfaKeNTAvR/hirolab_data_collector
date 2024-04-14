@@ -18,7 +18,7 @@
     |   |   |
     |   |   |_____t0 (folder):
     |   |   |   |
-    |   |   |   |_____images (folder)
+    |   |   |   |_____camera_name_images (folder)
     |   |   |
     |   |   |_____t1 (folder):
     |   |   |_____...
@@ -96,6 +96,9 @@
             <param 
             name="image_writing_period" 
             value="$(arg image_writing_period)"/>
+            <param 
+            name="camera_name" 
+            value="$(arg camera_name)"/>
             <param 
             name="image_topic" 
             value="$(arg image_topic)"/>

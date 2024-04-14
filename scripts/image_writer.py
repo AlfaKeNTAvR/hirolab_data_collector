@@ -538,6 +538,10 @@ def main():
         param_name=f'{rospy.get_name()}/output_file_name',
         # default='experiment-name_p0_m0_t0.png',
     )
+    camera_name = rospy.get_param(
+        param_name=f'{rospy.get_name()}/camera_name',
+        default='camera',
+    )
     image_writing_period = rospy.get_param(
         param_name=f'{rospy.get_name()}/image_writing_period',
         default=0.5,
@@ -561,7 +565,7 @@ def main():
 
     output_file_path = (
         f'{output_folder_path}'
-        f'/{experiment_name}/{participant_number}/{mode_number}/{trial_number}/images'
+        f'/{experiment_name}/{participant_number}/{mode_number}/{trial_number}/{camera_name}_images'
         f'/{output_file_name}'
     )
 
