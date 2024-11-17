@@ -516,7 +516,7 @@ class DataWriter:
         temp_data_frame = pd.DataFrame()
 
         topics_data['current_datetime'] = datetime.now()
-        topics_data['elapsed_time'] = self.elapsed_time
+        topics_data['elapsed_time'] = round(self.elapsed_time, 2)
 
         for i in range(len(self.__COLUMN_NAMES) - 2):
             (topics_data[self.__COLUMN_NAMES[i + 2]]) = [

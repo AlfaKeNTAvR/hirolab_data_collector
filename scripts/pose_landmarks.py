@@ -488,11 +488,11 @@ class PoseLandmarks:
         cv2.putText(
             frame,
             text=str(int(self.__physical_workload)),
-            org=(790, 415),
+            org=(690, 415),
             fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-            fontScale=1,
+            fontScale=3,
             color=(0, 0, 255),
-            thickness=2,
+            thickness=6,
         )
 
         self.__pose_landmarks_frame = frame

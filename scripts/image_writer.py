@@ -450,7 +450,7 @@ class ImageWriter:
             )
             return
 
-        rospy.loginfo(f'{self.__NODE_NAME}: the image was saved.')
+        # rospy.loginfo(f'{self.__NODE_NAME}: the image was saved.')
         self.__elapsed_time += self.__IMAGE_WRITING_PERIOD
 
     def __imshow(self):
